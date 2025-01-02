@@ -1,0 +1,6 @@
+pandas
+plotly
+openpyxl
+werkzeug
+flask-bootstrap
+flask
