@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Results</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        .details-row {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Results</h1>
+    <form method="get" action="{{ url_for('results', filename=request.view_args.filename) }}">
+        <label for="year">Year:</label>
+        <select name="year" id="year">
+            <option value="">All</option>
+            {% for year in years %}
+                <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+            {% endfor %}
+        </select>
+        <label for="month">Month:</label>
+        <select name="month" id="month">
+            <option value="">All</option>
+            {% for month in months %}
+                <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
+            {% endfor %}
+        </select>
+        <input type="submit" value="Filter">
+    </form>
+    <h2>Financial Indicators</h2>
+    <div>{{ graph_html|safe }}</div>
+    <h2>Compte de Résultat Agrégé</h2>
+    <h3>Classe 6 et 7 Agrégé</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>CompteNum</th>
+                <th>Libellé</th>
+                <th>Solde (€)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, row in class_6_7_agg.iterrows() %}
+                <tr class="summary-row" data-compte="{{ row['CompteNum'] }}">
+                    <td>{{ row['CompteNum'] }}</td>
+                    <td>{{ row['CompteLib_y'] }}</td>
+                    <td>{{ row['Solde'] }}</td>
+                </tr>
+                {% for __, detail_row in class_2_digits_agg[class_2_digits_agg['CompteNum1'] == row['CompteNum']].iterrows() %}
+                    <tr class="details-row" data-compte-detail="{{ row['CompteNum'] }}">
+                        <td>{{ detail_row['CompteNum'] }}</td>
+                        <td>{{ detail_row['CompteLib_y'] }}</td>
+                        <td>{{ detail_row['Solde'] }}</td>
+                    </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+    <h3>Classe 2 Digits Agrégé</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>CompteNum</th>
+                <th>Libellé</th>
+                <th>Solde (€)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, row in class_2_digits_agg.iterrows() %}
+                <tr>
+                    <td>{{ row['CompteNum'] }}</td>
+                    <td>{{ row['CompteLib_y'] }}</td>
+                    <td>{{ row['Solde'] }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <script>
+        $(document).ready(function(){
+            $(".summary-row").click(function(){
+                var compteNum = $(this).data("compte");
+                $("tr[data-compte-detail='" + compteNum + "']").toggle();
+            });
+        });
+    </script>
+</body>
+</html>
