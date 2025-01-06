@@ -1,1 +1,1 @@
-web: streamlit run newtest.py
+web: streamlit run newtest.py --server.port 8000
