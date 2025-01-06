@@ -6,3 +6,4 @@ flask-bootstrap
 flask
 gunicorn
 streamlit
+matplotlib
