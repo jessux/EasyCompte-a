@@ -166,17 +166,22 @@ if uploaded_file:
         i=i+1
     # st.write(filtered_df.CompteNum.unique())
     df.loc[df["Mois"]<10,"Mois"]="0"+df["Mois"].astype(str)
-    df["ANMOIS"]=df["Année"].astype(str)+df["Mois"].astype(str)
-    
+    df["Mois"] = df["Mois"].astype(str)
+    df["Année"] = df["Année"].astype(str)
+    df["ANMOIS"]=df["Année"].astype(str)+"-"+df["Mois"].astype(str)
     con = st.container(border=True)
     con.write("### Rémunération dirigeant, Cotisations dirigeant, Rémunération personnel, Charges sociales et Masse salariale par ANMOIS")
     details = con.expander("Détails")
-
-    details.write(df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum())
+    # Pivot table
+    test_df = df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":sum,}).reset_index()
+    pivot = pd.pivot_table(test_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
+    details.write(pd.concat([pivot,pivot.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])]).fillna(" Tous les mois").sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     con.bar_chart(data=df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
     
     cont = st.container(border=True)
-    cont.write("### Achat par ANMOIS")
+    cont.write("### Achats par ANMOIS")
     details1 = cont.expander("Détails")
-    details1.write(df[df["CompteNum"].str.contains("^6.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum())
+    test1_df = df[df["CompteNum"].str.contains("^6.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":sum,}).reset_index()
+    pivot1 = pd.pivot_table(test1_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
+    details1.write(pd.concat([pivot1,pivot1.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])]).fillna(" Tous les mois").sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     cont.bar_chart(data=df[df["CompteNum"].str.contains("^6.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
