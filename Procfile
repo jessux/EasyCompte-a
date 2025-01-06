@@ -1,1 +1,1 @@
-web: gunicorn --bind :$PORT app:app
+web: streamlit run newtest.py

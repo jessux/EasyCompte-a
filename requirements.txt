@@ -5,3 +5,4 @@ werkzeug
 flask-bootstrap
 flask
 gunicorn
+streamlit
