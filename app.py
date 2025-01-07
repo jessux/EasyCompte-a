@@ -182,7 +182,10 @@ if uploaded_file:
     # Pivot table
     test_df = df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":sum,}).reset_index()
     pivot = pd.pivot_table(test_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
-    details.write(pd.concat([pivot,pivot.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])]).fillna(" Tous les mois").sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
+    
+    pivot_temp =  pd.concat([pivot,pivot.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])])
+    pivot_temp["Mois"] = pivot_temp["Mois"].fillna(" Tous les mois")
+    details.write(pivot_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     con.bar_chart(data=df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
     
     cont = st.container(border=True)
@@ -190,5 +193,7 @@ if uploaded_file:
     details1 = cont.expander("Détails")
     test1_df = df[df["CompteNum"].str.contains("^6.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":sum,}).reset_index()
     pivot1 = pd.pivot_table(test1_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
-    details1.write(pd.concat([pivot1,pivot1.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])]).fillna(" Tous les mois").sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
+    pivot1_temp = pd.concat([pivot1,pivot1.groupby("Année").apply("sum").reset_index().drop(columns=["Mois"])])
+    pivot1_temp["Mois"]= pivot1_temp["Mois"].fillna(" Tous les mois")
+    details1.write(pivot1_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     cont.bar_chart(data=df[df["CompteNum"].str.contains("^6.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
