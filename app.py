@@ -69,6 +69,9 @@ if uploaded_file:
     
     df["CompteNum"]=df["CompteNum"].astype(str)
     # Convertir les colonnes 'Debit' et 'Credit' en numérique
+    df.Credit = df.Credit.astype(str)
+    df.Debit = df.Debit.astype(str)
+    
     df['Debit'] = df['Debit'].str.replace(',', '.').astype(float)
     df['Credit'] = df['Credit'].str.replace(',', '.').astype(float)
 
