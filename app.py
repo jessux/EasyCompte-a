@@ -22,6 +22,10 @@ def calculate_financials(data):
     # Supprimer les lignes contenant des valeurs manquantes dans les colonnes pertinentes
     data = data.dropna(subset=['CompteNum', 'Debit', 'Credit'])
     data.CompteNum = data.CompteNum.astype(str)
+    data.Credit = data.Credit.astype(str)
+    data.Debit = data.Debit.astype(str)
+    
+    
     data.Credit = data.Credit.str.replace(",",".").astype(float)
     data.Debit = data.Debit.str.replace(",",".").astype(float)
     # Calculer les indicateurs financiers
