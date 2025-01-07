@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import time
 from EasyCompta.utils import get_pcg
 
 # Définir les colonnes du DataFrame
@@ -66,7 +66,8 @@ if uploaded_file:
 
     df = df.merge(pcg_df,how="left",on="CompteNum")
 
-    
+    progress_text = "Chargement des indicateurs en cours. Merci de patienter..."
+    my_bar = st.progress(0, text=progress_text)
     df["CompteNum"]=df["CompteNum"].astype(str)
     # Convertir les colonnes 'Debit' et 'Credit' en numérique
     df.Credit = df.Credit.astype(str)
@@ -97,7 +98,7 @@ if uploaded_file:
     # else:
     #     filtered_df = df[(df['Année'] == selected_years) & (df['Mois'] == selected_months)]
     #     filtered_dfn1 = df[(df['Année']==int(selected_years)-1) & (df['Mois'] == int(selected_months)-1)]
-    
+
     ca = filtered_df[filtered_df["CompteNum"].str.contains("^7.*")]["Solde"].sum()*-1
     ca1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^7.*")]["Solde"].sum()*-1
     
@@ -127,6 +128,8 @@ if uploaded_file:
     
     ebe = valeur_ajoutee + aides - impots_taxes - masse_salariale
     ebe1 = valeur_ajoutee1 + aides1 - impots_taxes1 - masse_salariale1
+    my_bar.progress(20, text=progress_text)
+    my_bar.empty()
     financials = {
         "CA global": ca,
         "Achats consommés": achats_consommés,
@@ -171,6 +174,7 @@ if uploaded_file:
         else:
             col4.metric(label="**"+key+"**", value=f"{formatted_value} €", delta=str(delta)+ " € -- comparé à l'année : "+str(selected_years-1))
         i=i+1
+    my_bar.progress(40, text=progress_text)
     # st.write(filtered_df.CompteNum.unique())
     df.loc[df["Mois"]<10,"Mois"]="0"+df["Mois"].astype(str)
     df["Mois"] = df["Mois"].astype(str)
@@ -188,7 +192,7 @@ if uploaded_file:
     details.write("Classe de compte 641,645,644,646")
     details.write(pivot_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     con.bar_chart(data=df[df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
-    
+    my_bar.progress(60, text=progress_text)
     cont = st.container(border=True)
     cont.write("### Achats par ANMOIS")
     details1 = cont.expander("Détails")
@@ -198,4 +202,8 @@ if uploaded_file:
     pivot1_temp["Mois"]= pivot1_temp["Mois"].fillna(" Tous les mois")
     details1.write("Classe de compte 6")
     details1.write(pivot1_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
+    my_bar.progress(80, text=progress_text)
     cont.bar_chart(data=df[df["CompteNum"].str.contains("^6.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
+    my_bar.progress(100, text=progress_text)
+    time.sleep(1)
+    my_bar.empty()
