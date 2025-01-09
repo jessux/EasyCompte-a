@@ -1,3 +1,4 @@
+wheel
 pandas
 plotly
 openpyxl
@@ -7,3 +8,5 @@ flask
 gunicorn
 streamlit
 matplotlib
+streamlit-date-picker
+scipy
