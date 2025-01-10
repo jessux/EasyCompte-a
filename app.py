@@ -184,7 +184,6 @@ if uploaded_file:
     df = df.rename(columns={"Libellé":"Libellé PCG"})
     ownfilterdf = filter_dataframe(df)
     st.dataframe(ownfilterdf)
-    st.plotly_chart(ownfilterdf)
     my_bar = st.progress(0, text=progress_text)
     # Convertir les colonnes 'Debit' et 'Credit' en numérique
     df.Credit = df.Credit.astype(str)
