@@ -3,37 +3,15 @@ import pandas as pd
 import plotly.express as px
 import time
 from EasyCompta.utils import get_pcg
+import numpy as np
+from pandas.api.types import (
+    is_categorical_dtype,
+    is_datetime64_any_dtype,
+    is_numeric_dtype,
+    is_object_dtype,
+)
 st.set_page_config(page_title="EasyCompta", layout="wide")
 
-
-# Définir les colonnes du DataFrame
-columns = ["JournalCode", "JournalLib", "EcritureNum", "EcritureDate", "CompteNum", "CompteLib", 
-           "CompAuxNum", "CompAuxLib", "PieceRef", "PieceDate", "EcritureLib", "Debit", 
-           "Credit", "EcritureLet", "DateLet", "ValidDate", "Montantdevise", "Idevise"]
-
-# Titre du tableau de bord
-pcg_df=pd.DataFrame(get_pcg())
-load_data = st.container(border=True)
-
-# Téléchargement du fichier FEC
-uploaded_file = load_data.file_uploader("Télécharger un fichier FEC (.xlsx, .csv, .txt) avec un séparateur ;", type=['xlsx', 'csv', 'txt'])
-
-personal_pcg = st.checkbox("Voulez-vous ajouter votre propre PCG ?")
-
-if personal_pcg:
-    st.write("Merci de fournir un pcg au format CompteNum;Libellé")
-    # Téléchargement du fichier FEC
-    pcg_perso = load_data.file_uploader("Télécharger un fichier PCG (.xlsx, .csv, .txt) avec un séparateur ;", type=['xlsx', 'csv', 'txt'])
-    # Détection du type de fichier et chargement dans un DataFrame
-    if pcg_perso:
-        if pcg_perso.name.endswith('.xlsx'):
-            pcg_df = pd.read_excel(uploaded_file, names=["CompteNum","Libellé"])
-        elif pcg_perso.name.endswith('.csv'):
-            pcg_df = pd.read_csv(uploaded_file, sep=';', names=["CompteNum","Libellé"])
-        elif pcg_perso.name.endswith('.txt'):
-            pcg_df = pd.read_csv(uploaded_file, sep=';', names=["CompteNum","Libellé"])
-
-    print(pcg_df)
 
 def calculate_financials(data):
     # Supprimer les lignes contenant des valeurs manquantes dans les colonnes pertinentes
@@ -70,7 +48,107 @@ def calculate_financials(data):
         "EBE": ebe
     }
 
+def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds a UI on top of a dataframe to let viewers filter columns
 
+    Args:
+        df (pd.DataFrame): Original dataframe
+
+    Returns:
+        pd.DataFrame: Filtered dataframe
+    """
+    modify = st.checkbox("Add filters")
+
+    if not modify:
+        return df
+
+    df = df.copy()
+
+    # Try to convert datetimes into a standard format (datetime, no timezone)
+    for col in df.columns:
+        if is_object_dtype(df[col]):
+            try:
+                df[col] = pd.to_datetime(df[col])
+            except Exception:
+                pass
+
+        if is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].dt.tz_localize(None)
+
+    modification_container = st.container()
+
+    with modification_container:
+        to_filter_columns = st.multiselect("Filter dataframe on", df.columns)
+        for column in to_filter_columns:
+            left, right = st.columns((1, 20))
+            # Treat columns with < 10 unique values as categorical
+            if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+                user_cat_input = right.multiselect(
+                    f"Values for {column}",
+                    df[column].unique(),
+                    default=list(df[column].unique()),
+                )
+                df = df[df[column].isin(user_cat_input)]
+            elif is_numeric_dtype(df[column]):
+                _min = float(df[column].min())
+                _max = float(df[column].max())
+                step = (_max - _min) / 100
+                user_num_input = right.slider(
+                    f"Values for {column}",
+                    min_value=_min,
+                    max_value=_max,
+                    value=(_min, _max),
+                    step=step,
+                )
+                df = df[df[column].between(*user_num_input)]
+            elif is_datetime64_any_dtype(df[column]):
+                user_date_input = right.date_input(
+                    f"Values for {column}",
+                    value=(
+                        df[column].min(),
+                        df[column].max(),
+                    ),
+                )
+                if len(user_date_input) == 2:
+                    user_date_input = tuple(map(pd.to_datetime, user_date_input))
+                    start_date, end_date = user_date_input
+                    df = df.loc[df[column].between(start_date, end_date)]
+            else:
+                user_text_input = right.text_input(
+                    f"Substring or regex in {column}",
+                )
+                if user_text_input:
+                    df = df[df[column].astype(str).str.contains(user_text_input)]
+
+    return df
+
+# Définir les colonnes du DataFrame
+columns = ["JournalCode", "JournalLib", "EcritureNum", "EcritureDate", "CompteNum", "CompteLib", 
+           "CompAuxNum", "CompAuxLib", "PieceRef", "PieceDate", "EcritureLib", "Debit", 
+           "Credit", "EcritureLet", "DateLet", "ValidDate", "Montantdevise", "Idevise"]
+
+# Titre du tableau de bord
+pcg_df=pd.DataFrame(get_pcg())
+load_data = st.container(border=True)
+
+# Téléchargement du fichier FEC
+uploaded_file = load_data.file_uploader("Télécharger un fichier FEC (.xlsx, .csv, .txt)", type=['xlsx', 'csv', 'txt'])
+
+personal_pcg = st.checkbox("Voulez-vous ajouter votre propre PCG ?")
+
+if personal_pcg:
+    st.write("Merci de fournir un pcg au format CompteNum;Libellé")
+    # Téléchargement du fichier FEC
+    pcg_perso = load_data.file_uploader("Télécharger un fichier PCG (.xlsx, .csv, .txt) avec un séparateur ;", type=['xlsx', 'csv', 'txt'])
+    # Détection du type de fichier et chargement dans un DataFrame
+    if pcg_perso:
+        if pcg_perso.name.endswith('.xlsx'):
+            pcg_df = pd.read_excel(pcg_perso, names=["CompteNum","Libellé"])
+        elif pcg_perso.name.endswith('.csv'):
+            pcg_df = pd.read_csv(pcg_perso, sep=';', names=["CompteNum","Libellé"])
+        elif pcg_perso.name.endswith('.txt'):
+            pcg_df = pd.read_csv(pcg_perso, sep=';', names=["CompteNum","Libellé"])
 
 if uploaded_file:
     # Détection du type de fichier et chargement dans un DataFrame
@@ -79,15 +157,19 @@ if uploaded_file:
     elif uploaded_file.name.endswith('.csv'):
         df = pd.read_csv(uploaded_file, sep=';', names=columns)
     elif uploaded_file.name.endswith('.txt'):
-        df = pd.read_csv(uploaded_file, sep=';', names=columns)
-
-    df['EcritureDate'] = pd.to_datetime(df['EcritureDate'], format='%Y%m%d')
-    df['Année'] = df['EcritureDate'].dt.year
-    df['Mois'] = df['EcritureDate'].dt.month
-    df.loc[df["Mois"]<10,"Mois"]="0"+df["Mois"].astype(str)
-    df["Mois"] = df["Mois"].astype(str)
-    df["Année"] = df["Année"].astype(str)
-    df["ANMOIS"]=df["Année"].astype(str)+"-"+df["Mois"].astype(str)
+        df = pd.read_csv(uploaded_file,  sep='\t', lineterminator='\r', names=columns, encoding='latin1',header=0)
+    # Formattage des dates
+    df['EcritureDate'] = pd.to_datetime(df['EcritureDate'], format="%Y%m%d",errors="coerce")
+    df=df.dropna(subset = ['EcritureDate'])
+    df['Année'] = df['EcritureDate'].dt.strftime("%Y")
+    df['Mois'] = df['EcritureDate'].dt.month_name("Fr")
+    df["ANMOIS"] = df["Année"]+"-"+df["Mois"]
+    df['EcritureDate'] =df['EcritureDate'].dt.strftime("%Y/%m/%d")
+    df['PieceDate'] = pd.to_datetime(df['PieceDate'], format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
+    df['DateLet'] = pd.to_datetime(df['DateLet'],format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
+    df['ValidDate'] = pd.to_datetime(df['ValidDate'],format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
+    df["CompteNum"]=df["CompteNum"].astype(str)
+    df["PieceRef"] = df["PieceRef"].astype(str)
 
     years_options = df.ANMOIS.unique()
     years_selection = st.segmented_control(
@@ -95,10 +177,15 @@ if uploaded_file:
     )
     progress_text = "Chargement des indicateurs en cours. Merci de patienter..."
 
-    df = df.merge(pcg_df,how="left",on="CompteNum")
+    pcg_df.CompteNum = pcg_df.CompteNum.str.ljust(df.CompteNum.str.len().max(),'0')
+    df.CompteNum = df.CompteNum.str.ljust(df.CompteNum.str.len().max(),'0')
 
+    df = df.merge(pcg_df,how="left",on="CompteNum")
+    df = df.rename(columns={"Libellé":"Libellé PCG"})
+    ownfilterdf = filter_dataframe(df)
+    st.dataframe(ownfilterdf)
+    st.plotly_chart(ownfilterdf)
     my_bar = st.progress(0, text=progress_text)
-    df["CompteNum"]=df["CompteNum"].astype(str)
     # Convertir les colonnes 'Debit' et 'Credit' en numérique
     df.Credit = df.Credit.astype(str)
     df.Debit = df.Debit.astype(str)
@@ -129,6 +216,19 @@ if uploaded_file:
     impots_taxes = filtered_df[filtered_df['CompteNum'].str.startswith('63')]["Solde"].sum()
     masse_salariale = filtered_df[filtered_df['CompteNum'].str.startswith('64')]["Solde"].sum()
     ebe = valeur_ajoutee + aides - impots_taxes - masse_salariale
+    ammortissements_provisions = filtered_df[filtered_df["CompteNum"].str.contains("^681.*")]["Solde"].sum()
+    transfert_charges = filtered_df[filtered_df["CompteNum"].str.contains("^791.*|^796.*|^797.*")]["Solde"].sum()
+    autres_produits = filtered_df[filtered_df["CompteNum"].str.contains("^75.*")]["Solde"].sum()
+    autres_charges = filtered_df[filtered_df["CompteNum"].str.contains("^65.*")]["Solde"].sum()
+    rex = ebe - ammortissements_provisions +transfert_charges + autres_produits - autres_charges
+    charges_financiere = filtered_df[filtered_df["CompteNum"].str.contains("^66.*|^686.*")]["Solde"].sum()
+    produits_financiers = filtered_df[filtered_df["CompteNum"].str.contains("^76.*")]["Solde"].sum()
+    rcai = rex - charges_financiere + produits_financiers
+    charges_exceptionnels = filtered_df[filtered_df["CompteNum"].str.contains("^67.*")]["Solde"].sum()
+    produits_exceptionnels = filtered_df[filtered_df["CompteNum"].str.contains("^77.*")]["Solde"].sum()
+    participation_salaries = filtered_df[filtered_df["CompteNum"].str.contains("^69.*")]["Solde"].sum()
+    impots_societe = filtered_df[filtered_df["CompteNum"].str.contains("^695.*")]["Solde"].sum()
+    rn = rcai - charges_exceptionnels + produits_exceptionnels - participation_salaries - impots_societe
     financials = {
         "CA global": ca,
         "Achats consommés": achats_consommés,
@@ -139,7 +239,10 @@ if uploaded_file:
         "Aides": aides,
         "Impôts et taxes": impots_taxes,
         "Masse salariale": masse_salariale,
-        "EBE": ebe
+        "EBE": ebe,
+        "Résultat d'Exploitation (REX)":rex,
+        "Résultat Courant Avant Impôts":rcai,
+        "Résultat Net":rn
     }
 
     if filtered_dfn1 is not None:
@@ -153,6 +256,21 @@ if uploaded_file:
         impots_taxes1 = filtered_dfn1[filtered_dfn1['CompteNum'].str.startswith('63')]["Solde"].sum()
         masse_salariale1 = filtered_dfn1[filtered_dfn1['CompteNum'].str.startswith('64')]["Solde"].sum()
         ebe1 = valeur_ajoutee1 + aides1 - impots_taxes1 - masse_salariale1
+
+        ammortissements_provisions1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^681.*")]["Solde"].sum()
+        transfert_charges1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^791.*|^796.*|^797.*")]["Solde"].sum()
+        autres_produits1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^75.*")]["Solde"].sum()
+        autres_charges1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^65.*")]["Solde"].sum()
+        rex1 = ebe - ammortissements_provisions1 +transfert_charges1 + autres_produits1 - autres_charges1
+        charges_financiere1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^66.*|^686.*")]["Solde"].sum()
+        produits_financiers1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^76.*")]["Solde"].sum()
+        rcai1 = rex1 - charges_financiere1 + produits_financiers1
+        charges_exceptionnels1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^67.*")]["Solde"].sum()
+        produits_exceptionnels1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^77.*")]["Solde"].sum()
+        participation_salaries1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^69.*")]["Solde"].sum()
+        impots_societe1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^695.*")]["Solde"].sum()
+        rn1 = rcai1 - charges_exceptionnels1 + produits_exceptionnels1 - participation_salaries1 - impots_societe1
+
         financials1 = {
             "CA global": ca1,
             "Achats consommés": achats_consommés1,
@@ -163,7 +281,10 @@ if uploaded_file:
             "Aides": aides1,
             "Impôts et taxes": impots_taxes1,
             "Masse salariale": masse_salariale1,
-            "EBE": ebe1
+            "EBE": ebe1,
+            "Résultat d'Exploitation (REX)":rex1,
+            "Résultat Courant Avant Impôts":rcai1,
+            "Résultat Net":rn1
         }
     
     my_bar.progress(20, text=progress_text)
