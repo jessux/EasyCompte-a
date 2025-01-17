@@ -13,42 +13,73 @@ from pandas.api.types import (
 st.set_page_config(page_title="EasyCompta", layout="wide")
 
 
-def calculate_financials(data):
+def calculate_financials(fec_data):
     # Supprimer les lignes contenant des valeurs manquantes dans les colonnes pertinentes
-    data = data.dropna(subset=['CompteNum', 'Debit', 'Credit'])
-    data.CompteNum = data.CompteNum.astype(str)
-    data.Credit = data.Credit.astype(str)
-    data.Debit = data.Debit.astype(str)
+    fec_data = fec_data.dropna(subset=['CompteNum', 'Debit', 'Credit'])
+    fec_data.CompteNum = fec_data.CompteNum.astype(str)
+    fec_data.Credit = fec_data.Credit.astype(str)
+    fec_data.Debit = fec_data.Debit.astype(str)
     
     
-    data.Credit = data.Credit.str.replace(",",".").astype(float)
-    data.Debit = data.Debit.str.replace(",",".").astype(float)
+    fec_data.Credit = fec_data.Credit.str.replace(",",".").astype(float)
+    fec_data.Debit = fec_data.Debit.str.replace(",",".").astype(float)
     # Calculer les indicateurs financiers
-    ca = data[data['CompteNum'].str.startswith('7')]['Credit'].sum() - data[data['CompteNum'].str.startswith('7')]['Debit'].sum()
-    achats_consommés = data[data['CompteNum'].str.startswith(('6'))]['Debit'].sum() - data[data['CompteNum'].str.startswith(('6'))]['Credit'].sum()
-    marge = ca - achats_consommés
-    fournitures_consommables = data[data['CompteNum'].str.startswith('60')]['Debit'].sum() - data[data['CompteNum'].str.startswith('60')]['Credit'].sum()
-    services_exterieurs = data[data['CompteNum'].str.startswith('611','612','613','614','615','616','617','618') | data['CompteNum'].str.startswith('62')]['Debit'].sum() - data[data['CompteNum'].str.startswith('61') | data['CompteNum'].str.startswith('62')]['Credit'].sum()
-    valeur_ajoutee = marge - fournitures_consommables - services_exterieurs
-    aides = data[data['CompteNum'].str.startswith('74')]['Credit'].sum() - data[data['CompteNum'].str.startswith('74')]['Debit'].sum()
-    impots_taxes = data[data['CompteNum'].str.startswith('63')]['Debit'].sum() - data[data['CompteNum'].str.startswith('63')]['Credit'].sum()
-    masse_salariale = data[data['CompteNum'].str.startswith('64')]['Debit'].sum() - data[data['CompteNum'].str.startswith('64')]['Credit'].sum()
-    ebe = valeur_ajoutee + aides - impots_taxes - masse_salariale
+    # Total des ventes (CA global)
+    ca = fec_data[fec_data['CompteNum'].str.startswith('70')]['Credit'].sum()
 
-    return {
+    # Achats consommés (comptes 60)
+    achats_consommés = fec_data[fec_data['CompteNum'].str.startswith('60')]['Debit'].sum()
+
+    # Fournitures consommables (comptes 602)
+    fournitures_consommables = fec_data[fec_data['CompteNum'].str.startswith('602')]['Debit'].sum()
+
+    # Services extérieurs (comptes 61 et 62)
+    services_exterieurs = fec_data[fec_data['CompteNum'].str.startswith(('61', '62'))]['Debit'].sum()
+
+    # Valeur ajoutée
+    valeur_ajoutee = ca - (achats_consommés + fournitures_consommables + services_exterieurs)
+
+    # Aides (comptes 74)
+    aides = fec_data[fec_data['CompteNum'].str.startswith('74')]['Credit'].sum()
+
+    # Impôts et taxes (comptes 63)
+    impots_taxes = fec_data[fec_data['CompteNum'].str.startswith('63')]['Debit'].sum()
+
+    # Masse salariale (comptes 64)
+    masse_salariale = fec_data[fec_data['CompteNum'].str.startswith('64')]['Debit'].sum()
+
+    # Excédent Brut d'Exploitation (EBE)
+    ebe = valeur_ajoutee - (masse_salariale + impots_taxes)
+
+    # Résultat d'Exploitation (REX)
+    rex = ebe + fec_data[fec_data['CompteNum'].str.startswith('75')]['Credit'].sum() \
+              - fec_data[fec_data['CompteNum'].str.startswith('66')]['Debit'].sum()
+
+    # Résultat Courant Avant Impôts (RCAI)
+    rcai = rex - fec_data[fec_data['CompteNum'].str.startswith('68')]['Debit'].sum()
+
+    # Résultat Net (RN)
+    rn = rcai - fec_data[fec_data['CompteNum'].str.startswith('69')]['Debit'].sum()
+
+    financials = {
         "CA global": ca,
         "Achats consommés": achats_consommés,
-        "Marge": marge,
+        "Marge": ca - achats_consommés,
         "Fournitures consommables": fournitures_consommables,
         "Services extérieurs": services_exterieurs,
         "Valeur ajoutée": valeur_ajoutee,
         "Aides": aides,
         "Impôts et taxes": impots_taxes,
         "Masse salariale": masse_salariale,
-        "EBE": ebe
+        "EBE": ebe,
+        "Résultat d'Exploitation (REX)": rex,
+        "Résultat Courant Avant Impôts": rcai,
+        "Résultat Net": rn
     }
 
-def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    return financials
+
+def filter_dataframe(container,df: pd.DataFrame) -> pd.DataFrame:
     """
     Adds a UI on top of a dataframe to let viewers filter columns
 
@@ -58,7 +89,7 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Filtered dataframe
     """
-    modify = st.checkbox("Add filters")
+    modify = container.checkbox("Add filters")
 
     if not modify:
         return df
@@ -76,12 +107,12 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if is_datetime64_any_dtype(df[col]):
             df[col] = df[col].dt.tz_localize(None)
 
-    modification_container = st.container()
+    modification_container = container.container()
 
     with modification_container:
-        to_filter_columns = st.multiselect("Filter dataframe on", df.columns)
+        to_filter_columns = container.multiselect("Filter dataframe on", df.columns)
         for column in to_filter_columns:
-            left, right = st.columns((1, 20))
+            left, right = container.columns((1, 20))
             # Treat columns with < 10 unique values as categorical
             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
                 user_cat_input = right.multiselect(
@@ -162,8 +193,10 @@ if uploaded_file:
     df['EcritureDate'] = pd.to_datetime(df['EcritureDate'], format="%Y%m%d",errors="coerce")
     df=df.dropna(subset = ['EcritureDate'])
     df['Année'] = df['EcritureDate'].dt.strftime("%Y")
-    df['Mois'] = df['EcritureDate'].dt.month_name("Fr")
+    df['Mois'] = df['EcritureDate'].dt.strftime("%m")
     df["ANMOIS"] = df["Année"]+"-"+df["Mois"]
+    # df["ANMOIS"]= pd.to_datetime(df["ANMOIS"],format="%Y-%b").dt.strftime("%Y-%m")
+    # df['Mois'] = df['EcritureDate'].dt.month_name("Fr")
     df['EcritureDate'] =df['EcritureDate'].dt.strftime("%Y/%m/%d")
     df['PieceDate'] = pd.to_datetime(df['PieceDate'], format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
     df['DateLet'] = pd.to_datetime(df['DateLet'],format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
@@ -171,7 +204,8 @@ if uploaded_file:
     df["CompteNum"]=df["CompteNum"].astype(str)
     df["PieceRef"] = df["PieceRef"].astype(str)
 
-    years_options = df.ANMOIS.unique()
+    years_options = sorted(df.ANMOIS.unique())
+
     years_selection = st.segmented_control(
         "Séléction pour filtre : Années-mois", years_options, selection_mode="multi"
     )
@@ -182,8 +216,12 @@ if uploaded_file:
 
     df = df.merge(pcg_df,how="left",on="CompteNum")
     df = df.rename(columns={"Libellé":"Libellé PCG"})
-    ownfilterdf = filter_dataframe(df)
-    st.dataframe(ownfilterdf)
+    container = st.container()
+    details_expander = container.expander("Tableau FEC")
+
+    ownfilterdf = filter_dataframe(details_expander,df)
+
+    details_expander.dataframe(ownfilterdf)
     my_bar = st.progress(0, text=progress_text)
     # Convertir les colonnes 'Debit' et 'Credit' en numérique
     df.Credit = df.Credit.astype(str)
@@ -205,86 +243,11 @@ if uploaded_file:
         filtered_df = df
         filtered_dfn1=None
 
-    ca = filtered_df[filtered_df["CompteNum"].str.contains("^7.*")]["Solde"].sum()*-1
-    achats_consommés = filtered_df[filtered_df['CompteNum'].str.contains('^603.*|^607.*')]["Solde"].sum()
-    marge = ca - achats_consommés
-    fournitures_consommables = filtered_df[filtered_df["CompteNum"].str.contains('^602.*|^606.*')]["Solde"].sum()
-    services_exterieurs = filtered_df[filtered_df["CompteNum"].str.contains('^61.*|^62.*')]["Solde"].sum()
-    valeur_ajoutee = marge - fournitures_consommables - services_exterieurs
-    aides = filtered_df[filtered_df['CompteNum'].str.startswith('74')]["Solde"].sum()
-    impots_taxes = filtered_df[filtered_df['CompteNum'].str.startswith('63')]["Solde"].sum()
-    masse_salariale = filtered_df[filtered_df['CompteNum'].str.startswith('64')]["Solde"].sum()
-    ebe = valeur_ajoutee + aides - impots_taxes - masse_salariale
-    ammortissements_provisions = filtered_df[filtered_df["CompteNum"].str.contains("^681.*")]["Solde"].sum()
-    transfert_charges = filtered_df[filtered_df["CompteNum"].str.contains("^791.*|^796.*|^797.*")]["Solde"].sum()
-    autres_produits = filtered_df[filtered_df["CompteNum"].str.contains("^75.*")]["Solde"].sum()
-    autres_charges = filtered_df[filtered_df["CompteNum"].str.contains("^65.*")]["Solde"].sum()
-    rex = ebe - ammortissements_provisions +transfert_charges + autres_produits - autres_charges
-    charges_financiere = filtered_df[filtered_df["CompteNum"].str.contains("^66.*|^686.*")]["Solde"].sum()
-    produits_financiers = filtered_df[filtered_df["CompteNum"].str.contains("^76.*")]["Solde"].sum()
-    rcai = rex - charges_financiere + produits_financiers
-    charges_exceptionnels = filtered_df[filtered_df["CompteNum"].str.contains("^67.*")]["Solde"].sum()
-    produits_exceptionnels = filtered_df[filtered_df["CompteNum"].str.contains("^77.*")]["Solde"].sum()
-    participation_salaries = filtered_df[filtered_df["CompteNum"].str.contains("^69.*")]["Solde"].sum()
-    impots_societe = filtered_df[filtered_df["CompteNum"].str.contains("^695.*")]["Solde"].sum()
-    rn = rcai - charges_exceptionnels + produits_exceptionnels - participation_salaries - impots_societe
-    financials = {
-        "CA global": ca,
-        "Achats consommés": achats_consommés,
-        "Marge": marge,
-        "Fournitures consommables": fournitures_consommables,
-        "Services extérieurs": services_exterieurs,
-        "Valeur ajoutée": valeur_ajoutee,
-        "Aides": aides,
-        "Impôts et taxes": impots_taxes,
-        "Masse salariale": masse_salariale,
-        "EBE": ebe,
-        "Résultat d'Exploitation (REX)":rex,
-        "Résultat Courant Avant Impôts":rcai,
-        "Résultat Net":rn
-    }
+    financials=calculate_financials(filtered_df)
 
     if filtered_dfn1 is not None:
-        ca1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^7.*")]["Solde"].sum()*-1
-        achats_consommés1= filtered_dfn1[filtered_dfn1['CompteNum'].str.contains('^603.*|^607.*')]["Solde"].sum()
-        marge1= ca1 - achats_consommés1
-        fournitures_consommables1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains('^602.*|^606.*')]["Solde"].sum()
-        services_exterieurs1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains('^61.*|^62.*')]["Solde"].sum()
-        valeur_ajoutee1 = marge1 - fournitures_consommables1 - services_exterieurs1
-        aides1 = filtered_dfn1[filtered_dfn1['CompteNum'].str.startswith('74')]["Solde"].sum()
-        impots_taxes1 = filtered_dfn1[filtered_dfn1['CompteNum'].str.startswith('63')]["Solde"].sum()
-        masse_salariale1 = filtered_dfn1[filtered_dfn1['CompteNum'].str.startswith('64')]["Solde"].sum()
-        ebe1 = valeur_ajoutee1 + aides1 - impots_taxes1 - masse_salariale1
+        financials1=calculate_financials(filtered_dfn1)
 
-        ammortissements_provisions1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^681.*")]["Solde"].sum()
-        transfert_charges1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^791.*|^796.*|^797.*")]["Solde"].sum()
-        autres_produits1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^75.*")]["Solde"].sum()
-        autres_charges1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^65.*")]["Solde"].sum()
-        rex1 = ebe - ammortissements_provisions1 +transfert_charges1 + autres_produits1 - autres_charges1
-        charges_financiere1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^66.*|^686.*")]["Solde"].sum()
-        produits_financiers1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^76.*")]["Solde"].sum()
-        rcai1 = rex1 - charges_financiere1 + produits_financiers1
-        charges_exceptionnels1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^67.*")]["Solde"].sum()
-        produits_exceptionnels1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^77.*")]["Solde"].sum()
-        participation_salaries1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^69.*")]["Solde"].sum()
-        impots_societe1 = filtered_dfn1[filtered_dfn1["CompteNum"].str.contains("^695.*")]["Solde"].sum()
-        rn1 = rcai1 - charges_exceptionnels1 + produits_exceptionnels1 - participation_salaries1 - impots_societe1
-
-        financials1 = {
-            "CA global": ca1,
-            "Achats consommés": achats_consommés1,
-            "Marge": marge1,
-            "Fournitures consommables": fournitures_consommables1,
-            "Services extérieurs": services_exterieurs1,
-            "Valeur ajoutée": valeur_ajoutee1,
-            "Aides": aides1,
-            "Impôts et taxes": impots_taxes1,
-            "Masse salariale": masse_salariale1,
-            "EBE": ebe1,
-            "Résultat d'Exploitation (REX)":rex1,
-            "Résultat Courant Avant Impôts":rcai1,
-            "Résultat Net":rn1
-        }
     
     my_bar.progress(20, text=progress_text)
     my_bar.empty()
