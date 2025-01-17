@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
-from EasyCompta.utils import get_pcg
+from EasyCompta.utils import *
 import numpy as np
 from pandas.api.types import (
     is_categorical_dtype,
@@ -13,71 +13,6 @@ from pandas.api.types import (
 st.set_page_config(page_title="EasyCompta", layout="wide")
 
 
-def calculate_financials(fec_data):
-    # Supprimer les lignes contenant des valeurs manquantes dans les colonnes pertinentes
-    fec_data = fec_data.dropna(subset=['CompteNum', 'Debit', 'Credit'])
-    fec_data.CompteNum = fec_data.CompteNum.astype(str)
-    fec_data.Credit = fec_data.Credit.astype(str)
-    fec_data.Debit = fec_data.Debit.astype(str)
-    
-    
-    fec_data.Credit = fec_data.Credit.str.replace(",",".").astype(float)
-    fec_data.Debit = fec_data.Debit.str.replace(",",".").astype(float)
-    # Calculer les indicateurs financiers
-    # Total des ventes (CA global)
-    ca = fec_data[fec_data['CompteNum'].str.startswith('70')]['Credit'].sum()
-
-    # Achats consommés (comptes 60)
-    achats_consommés = fec_data[fec_data['CompteNum'].str.startswith('60')]['Debit'].sum()
-
-    # Fournitures consommables (comptes 602)
-    fournitures_consommables = fec_data[fec_data['CompteNum'].str.startswith('602')]['Debit'].sum()
-
-    # Services extérieurs (comptes 61 et 62)
-    services_exterieurs = fec_data[fec_data['CompteNum'].str.startswith(('61', '62'))]['Debit'].sum()
-
-    # Valeur ajoutée
-    valeur_ajoutee = ca - (achats_consommés + fournitures_consommables + services_exterieurs)
-
-    # Aides (comptes 74)
-    aides = fec_data[fec_data['CompteNum'].str.startswith('74')]['Credit'].sum()
-
-    # Impôts et taxes (comptes 63)
-    impots_taxes = fec_data[fec_data['CompteNum'].str.startswith('63')]['Debit'].sum()
-
-    # Masse salariale (comptes 64)
-    masse_salariale = fec_data[fec_data['CompteNum'].str.startswith('64')]['Debit'].sum()
-
-    # Excédent Brut d'Exploitation (EBE)
-    ebe = valeur_ajoutee - (masse_salariale + impots_taxes)
-
-    # Résultat d'Exploitation (REX)
-    rex = ebe + fec_data[fec_data['CompteNum'].str.startswith('75')]['Credit'].sum() \
-              - fec_data[fec_data['CompteNum'].str.startswith('66')]['Debit'].sum()
-
-    # Résultat Courant Avant Impôts (RCAI)
-    rcai = rex - fec_data[fec_data['CompteNum'].str.startswith('68')]['Debit'].sum()
-
-    # Résultat Net (RN)
-    rn = rcai - fec_data[fec_data['CompteNum'].str.startswith('69')]['Debit'].sum()
-
-    financials = {
-        "CA global": ca,
-        "Achats consommés": achats_consommés,
-        "Marge": ca - achats_consommés,
-        "Fournitures consommables": fournitures_consommables,
-        "Services extérieurs": services_exterieurs,
-        "Valeur ajoutée": valeur_ajoutee,
-        "Aides": aides,
-        "Impôts et taxes": impots_taxes,
-        "Masse salariale": masse_salariale,
-        "EBE": ebe,
-        "Résultat d'Exploitation (REX)": rex,
-        "Résultat Courant Avant Impôts": rcai,
-        "Résultat Net": rn
-    }
-
-    return financials
 
 def filter_dataframe(container,df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -161,17 +96,17 @@ columns = ["JournalCode", "JournalLib", "EcritureNum", "EcritureDate", "CompteNu
 
 # Titre du tableau de bord
 pcg_df=pd.DataFrame(get_pcg())
-load_data = st.container(border=True)
+load_data = st.sidebar.container(border=True)
 
 # Téléchargement du fichier FEC
 uploaded_file = load_data.file_uploader("Télécharger un fichier FEC (.xlsx, .csv, .txt)", type=['xlsx', 'csv', 'txt'])
 
-personal_pcg = st.checkbox("Voulez-vous ajouter votre propre PCG ?")
+personal_pcg = load_data.checkbox("Voulez-vous ajouter votre propre PCG ?")
 
 if personal_pcg:
-    st.write("Merci de fournir un pcg au format CompteNum;Libellé")
     # Téléchargement du fichier FEC
-    pcg_perso = load_data.file_uploader("Télécharger un fichier PCG (.xlsx, .csv, .txt) avec un séparateur ;", type=['xlsx', 'csv', 'txt'])
+    load_data.write("Merci de fournir un pcg au format CompteNum;Libellé")
+    pcg_perso = load_data.file_uploader("Télécharger un fichier PCG (.xlsx, .csv, .txt)", type=['xlsx', 'csv', 'txt'])
     # Détection du type de fichier et chargement dans un DataFrame
     if pcg_perso:
         if pcg_perso.name.endswith('.xlsx'):
@@ -189,14 +124,14 @@ if uploaded_file:
         df = pd.read_csv(uploaded_file, sep=';', names=columns)
     elif uploaded_file.name.endswith('.txt'):
         df = pd.read_csv(uploaded_file,  sep='\t', lineterminator='\r', names=columns, encoding='latin1',header=0)
+    
     # Formattage des dates
+
     df['EcritureDate'] = pd.to_datetime(df['EcritureDate'], format="%Y%m%d",errors="coerce")
     df=df.dropna(subset = ['EcritureDate'])
     df['Année'] = df['EcritureDate'].dt.strftime("%Y")
     df['Mois'] = df['EcritureDate'].dt.strftime("%m")
     df["ANMOIS"] = df["Année"]+"-"+df["Mois"]
-    # df["ANMOIS"]= pd.to_datetime(df["ANMOIS"],format="%Y-%b").dt.strftime("%Y-%m")
-    # df['Mois'] = df['EcritureDate'].dt.month_name("Fr")
     df['EcritureDate'] =df['EcritureDate'].dt.strftime("%Y/%m/%d")
     df['PieceDate'] = pd.to_datetime(df['PieceDate'], format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
     df['DateLet'] = pd.to_datetime(df['DateLet'],format="%Y%m%d",errors="coerce").dt.strftime("%Y/%m/%d")
@@ -204,18 +139,20 @@ if uploaded_file:
     df["CompteNum"]=df["CompteNum"].astype(str)
     df["PieceRef"] = df["PieceRef"].astype(str)
 
-    years_options = sorted(df.ANMOIS.unique())
+    st.sidebar.subheader("Filtrer par période")
+    min_date = pd.to_datetime(df['EcritureDate']).min()
+    max_date = pd.to_datetime(df['EcritureDate']).max()
+    start_date = st.sidebar.date_input("Date de début", min_date)
+    end_date = st.sidebar.date_input("Date de fin", max_date)
+    df['EcritureDate'] = pd.to_datetime(df['EcritureDate'])
 
-    years_selection = st.segmented_control(
-        "Séléction pour filtre : Années-mois", years_options, selection_mode="multi"
-    )
+
     progress_text = "Chargement des indicateurs en cours. Merci de patienter..."
 
     pcg_df.CompteNum = pcg_df.CompteNum.str.ljust(df.CompteNum.str.len().max(),'0')
     df.CompteNum = df.CompteNum.str.ljust(df.CompteNum.str.len().max(),'0')
-
+    pcg_df = pcg_df.rename(columns={"Libellé":"Libellé PCG"})
     df = df.merge(pcg_df,how="left",on="CompteNum")
-    df = df.rename(columns={"Libellé":"Libellé PCG"})
     container = st.container()
     details_expander = container.expander("Tableau FEC")
 
@@ -234,85 +171,95 @@ if uploaded_file:
     df['Solde'] = df['Debit'] - df['Credit']
     df['Solde'] = df['Solde'].astype(str).str.replace(',','.').astype(float)
     # Filtrage par année et mois
-
-    # selected_months = load_data.selectbox("Sélectionner les mois", months)
-    if years_selection:# and selected_months == "Tous les mois":
-        filtered_df = df[df['ANMOIS'].isin(years_selection)]
-        filtered_dfn1= df[~df['ANMOIS'].isin(years_selection)]
-    else:
-        filtered_df = df
-        filtered_dfn1=None
+    filtered_df = df[(df['EcritureDate'] >= pd.Timestamp(start_date)) & 
+                                (df['EcritureDate'] <= pd.Timestamp(end_date))]
+    filtered_dfn1= df[~((df['EcritureDate'] >= pd.Timestamp(start_date)) & 
+                           (df['EcritureDate'] <= pd.Timestamp(end_date)))]
 
     financials=calculate_financials(filtered_df)
 
-    if filtered_dfn1 is not None:
+    if not filtered_dfn1.empty:
         financials1=calculate_financials(filtered_dfn1)
 
     
     my_bar.progress(20, text=progress_text)
     my_bar.empty()
-    
-    c = st.container(border=True)
-    c.write("### Indicateurs financiers")
-    col1,col2,col3,col4 = c.columns(4)
+    container_indicateurs = st.container(border=True)
+    container_indicateurs.write("### Indicateurs financiers")
+
+    container_indicateurs_c1,container_indicateurs_c2 = container_indicateurs.columns(2)
+    container_indicateurs_1 = container_indicateurs_c1.container(border=True)
+    col1,col2,col3 = container_indicateurs_1.columns(3)
     i = 0
     for key, value in financials.items():
         formatted_value = f"{value:,.2f}".replace(',', ' ')
         delta  = 0
-        if filtered_dfn1 is not None:
+        if not filtered_dfn1.empty:
             if not financials1[key] == 0.0:
                 delta = round(value - financials1[key],2)
-            if i%4==0:
+            if i%3==0:
                 col1.metric(label="**"+key+"**", value=f"{formatted_value} €", delta=str(delta)+ " € -- comparé aux périodes non séléctionnées")
-            elif i%4==1:
+            elif i%3==1:
                 col2.metric(label="**"+key+"**", value=f"{formatted_value} €", delta=str(delta)+ " € -- comparé aux périodes non séléctionnées")
-            elif i%4==2:
+            elif i%3==2:
                 col3.metric(label="**"+key+"**", value=f"{formatted_value} €", delta=str(delta)+ " € -- comparé aux périodes non séléctionnées")
-            else:
-                col4.metric(label="**"+key+"**", value=f"{formatted_value} €", delta=str(delta)+ " € -- comparé aux périodes non séléctionnées")
         else:
-            if i%4==0:
+            if i%3==0:
                 col1.metric(label="**"+key+"**", value=f"{formatted_value} €")
-            elif i%4==1:
+            elif i%3==1:
                 col2.metric(label="**"+key+"**", value=f"{formatted_value} €")
-            elif i%4==2:
+            elif i%3==2:
                 col3.metric(label="**"+key+"**", value=f"{formatted_value} €")
-            else:
-                col4.metric(label="**"+key+"**", value=f"{formatted_value} €")
         i=i+1
     my_bar.progress(40, text=progress_text)
+    ct = container_indicateurs_c2.container(border=True)
+    col11,col21 = ct.columns(2)
+    i = 0
+    for key, value in calculer_ratios(financials).items():
+        formatted_value = f"{value:,.2f}".replace(',', ' ')
+        if i%2==0:
+            col11.metric(label="**"+key+"**", value=f"{formatted_value} %")
+        elif i%2==1:
+            col21.metric(label="**"+key+"**", value=f"{formatted_value} %")
+        i=i+1
 
-    #### Vision personnalisé ?###
-    # con1 = st.container(border=True)
-    # con1.write("### Personalisation de la visualisation")
-    # select_options = df.columns
-    # select_selection = con1.segmented_control(
-    #     "Séléction pour filtre : Années-mois", select_options, selection_mode="multi"
-    # )
-    # detailsdatatable = con1.expander("Détails")
-    # detailsdatatable.write(filtered_df[list(select_selection)])
-    # con1.(data=filtered_df[list(select_selection)])
+    extra_info = st.container(border=True)
+    Bilan_tab,Graph_tab = extra_info.tabs(["Bilan","Graphiques"])
+    Bilan_tab.subheader("Bilan Comptable")
+    bilan = generer_bilan(filtered_df)
+    bilan_df = pd.DataFrame(list(bilan.items()), columns=["Poste", "Montant (€)"])
+    Bilan_tab.data_editor(
+    bilan_df,
+    column_config={
+        "Montant (€)": st.column_config.NumberColumn(
+            "Montant (€)",
+            help="Le prix en euro",
+            step=1,
+            format="%d €",
+        )
+    },
+    hide_index=True,
+)
 
-
-    con = st.container(border=True)
+    con = Graph_tab.container(border=True)
     con.write("### Rémunération dirigeant, Cotisations dirigeant, Rémunération personnel, Charges sociales et Masse salariale par ANMOIS")
     details = con.expander("Détails")
     # Pivot table
-    test_df = filtered_df[filtered_df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":"sum",}).reset_index()
-    pivot = pd.pivot_table(test_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
+    test_df = filtered_df[filtered_df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["Année","Mois","CompteLib","Libellé PCG"]).agg({"Solde":"sum",}).reset_index()
+    pivot = pd.pivot_table(test_df,values="Solde",index=["Année","Mois"],columns=["Libellé PCG"]).reset_index()
     pivot_temp =  pd.concat([pivot,pivot.groupby("Année").sum().reset_index().drop(columns=["Mois"])])
     pivot_temp["Mois"] = pivot_temp["Mois"].fillna(" Tous les mois")
     details.write("Classe de compte 641,645,644,646")
     details.write(pivot_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
 
     fig = px.bar(
-        filtered_df[filtered_df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),
+        filtered_df[filtered_df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["Libellé PCG","ANMOIS"]).Solde.sum().reset_index(),
         x='ANMOIS',
         y='Solde',
-        color='CompteLib',
+        color='Libellé PCG',
         orientation='v',
         barmode='group',
-        title="Solde par ANMOIS et par CompteLib pour les compte de classe 641,645,644,646",
+        title="Solde par ANMOIS et par Libellé PCG pour les compte de classe 641,645,644,646",
         labels={'Solde': 'Solde (€)', 'ANMOIS': 'Année-Mois'}
     )
 
@@ -321,27 +268,100 @@ if uploaded_file:
     my_bar.progress(60, text=progress_text)
 
 
-    cont = st.container(border=True)
+    cont = Graph_tab.container(border=True)
     cont.write("### Achats par ANMOIS")
     details1 = cont.expander("Détails")
-    test1_df = filtered_df[filtered_df["CompteNum"].str.contains("^6.*")].groupby(["Année","Mois","CompteLib"]).agg({"Solde":"sum",}).reset_index()
-    pivot1 = pd.pivot_table(test1_df,values="Solde",index=["Année","Mois"],columns=["CompteLib"]).reset_index()
+    test1_df = filtered_df[filtered_df["CompteNum"].str.contains("^6.*")].groupby(["Année","Mois","CompteLib","Libellé PCG"]).agg({"Solde":"sum",}).reset_index()
+    pivot1 = pd.pivot_table(test1_df,values="Solde",index=["Année","Mois"],columns=["Libellé PCG"]).reset_index()
     pivot1_temp = pd.concat([pivot1,pivot1.groupby("Année").sum().reset_index().drop(columns=["Mois"])])
     pivot1_temp["Mois"]= pivot1_temp["Mois"].fillna(" Tous les mois")
     details1.write("Classe de compte 6")
     details1.write(pivot1_temp.fillna(0.0).sort_values(["Année","Mois"],ascending=[True,True]).set_index(["Année","Mois"]))
     my_bar.progress(80, text=progress_text)
     fig1 = px.bar(
-        filtered_df[filtered_df["CompteNum"].str.contains("^641.*|^645.*|^644.*|^646.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),
+        filtered_df[filtered_df["CompteNum"].str.startswith("6")].groupby(["Libellé PCG","ANMOIS"]).Solde.sum().reset_index(),
         x='ANMOIS',
         y='Solde',
-        color='CompteLib',
+        color='Libellé PCG',
         orientation='v',
         barmode='group',
-        title="Achats par ANMOIS et par CompteLib pour les compte de classe 6",
+        title="Achats par ANMOIS et par Libellé PCG pour les compte de classe 6",
         labels={'Solde': 'Solde (€)', 'ANMOIS': 'Année-Mois'}
     )
     cont.plotly_chart(fig1, key="achats",use_container_width=True)
+
+
+    # Création du graphique personnalisé
+    cont.subheader("Paramètres du graphique")
+    colonne_x = cont.selectbox("Sélectionnez la colonne pour l'axe X", df.columns)
+    colonne_y = cont.selectbox("Sélectionnez la colonne pour l'axe Y", df.columns)
+    couleur_colonne = cont.selectbox("Colonne pour la couleur (facultatif)", [None] + list(df.columns))
+    type_graphique = cont.selectbox(
+        "Sélectionnez le type de graphique",
+        ["Barres", "Lignes", "Nuages de points", "Histogramme", "Boîte à moustaches (Boxplot)"]
+    )
+
+        # Options supplémentaires
+    cont.subheader("Options supplémentaires")
+    titre = cont.text_input("Titre du graphique", "Mon Graphique")
+    largeur = cont.slider("Largeur du graphique", 400, 1200, 800)
+    hauteur = cont.slider("Hauteur du graphique", 300, 800, 600)
+
+    # Génération du graphique
+    cont.subheader("Graphique Personnalisé")
+    if colonne_x and colonne_y:
+        if type_graphique == "Barres":
+            fig = px.bar(
+                df,
+                x=colonne_x,
+                y=colonne_y,
+                color=couleur_colonne,
+                title=titre,
+                width=largeur,
+                height=hauteur
+            )
+        elif type_graphique == "Lignes":
+            fig = px.line(
+                df,
+                x=colonne_x,
+                y=colonne_y,
+                color=couleur_colonne,
+                title=titre,
+                width=largeur,
+                height=hauteur
+            )
+        elif type_graphique == "Nuages de points":
+            fig = px.scatter(
+                df,
+                x=colonne_x,
+                y=colonne_y,
+                color=couleur_colonne,
+                title=titre,
+                width=largeur,
+                height=hauteur
+            )
+        elif type_graphique == "Histogramme":
+            fig = px.histogram(
+                df,
+                x=colonne_x,
+                color=couleur_colonne,
+                title=titre,
+                width=largeur,
+                height=hauteur
+            )
+        elif type_graphique == "Boîte à moustaches (Boxplot)":
+            fig = px.box(
+                df,
+                x=colonne_x,
+                y=colonne_y,
+                color=couleur_colonne,
+                title=titre,
+                width=largeur,
+                height=hauteur
+            )
+
+        # Affichage du graphique
+        cont.plotly_chart(fig, use_container_width=True)
     # cont.bar_chart(data=filtered_df[filtered_df["CompteNum"].str.contains("^6.*")].groupby(["CompteLib","ANMOIS"]).Solde.sum().reset_index(),x="ANMOIS",y="Solde",color="CompteLib",stack=False)
     my_bar.progress(100, text=progress_text)
     time.sleep(1)
