@@ -52,9 +52,8 @@ def calculate_financials(fec_data):
     fec_data.Credit = fec_data.Credit.astype(str)
     fec_data.Debit = fec_data.Debit.astype(str)
     
-    
-    fec_data.Credit = fec_data.Credit.str.replace(",",".").astype(float)
-    fec_data.Debit = fec_data.Debit.str.replace(",",".").astype(float)
+    fec_data.Credit = fec_data.Credit.str.replace(",",".",regex=False).astype(float)
+    fec_data.Debit = fec_data.Debit.str.replace(",",".",regex=False).astype(float)
     # Calculer les indicateurs financiers
     # Total des ventes (CA global)
     ca = fec_data[fec_data['CompteNum'].str.startswith('70')]['Credit'].sum()
