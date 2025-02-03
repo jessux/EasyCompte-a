@@ -45,6 +45,12 @@ def generer_bilan(fec_data):
 
     return bilan
 
+def calculate_ca(fec_data):
+    return (fec_data[fec_data['CompteNum'].str.startswith('70') & ~fec_data['CompteNum'].str.startswith('709')]['Credit'].sum() -
+            fec_data[fec_data['CompteNum'].str.startswith('70') & ~fec_data['CompteNum'].str.startswith('709')]['Debit'].sum() -
+            fec_data[fec_data['CompteNum'].str.startswith('709')]['Credit'].sum())
+
+
 def calculate_achats_consommes(fec_data):
     # Achats (comptes 60, sauf 603)
     achats = fec_data[fec_data['CompteNum'].str.startswith('60') & ~fec_data['CompteNum'].str.startswith('603')]['Debit'].sum()
@@ -282,6 +288,8 @@ def calculate_financials(fec_data):
     # Prétraitement des données
     fec_data = fec_data.dropna(subset=['CompteNum', 'Debit', 'Credit'])
     fec_data['CompteNum'] = fec_data['CompteNum'].astype(str)
+    fec_data['Credit'] = fec_data['Credit'].astype(str)
+    fec_data['Debit'] = fec_data['Debit'].astype(str)
     fec_data['Credit'] = fec_data['Credit'].str.replace(",",".").astype(float)
     fec_data['Debit'] = fec_data['Debit'].str.replace(",",".").astype(float)
 
