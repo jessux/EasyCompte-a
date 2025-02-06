@@ -46,9 +46,19 @@ def generer_bilan(fec_data):
     return bilan
 
 def calculate_ca(fec_data):
-    return (fec_data[fec_data['CompteNum'].str.startswith('70') & ~fec_data['CompteNum'].str.startswith('709')]['Credit'].sum() -
-            fec_data[fec_data['CompteNum'].str.startswith('70') & ~fec_data['CompteNum'].str.startswith('709')]['Debit'].sum() -
-            fec_data[fec_data['CompteNum'].str.startswith('709')]['Credit'].sum())
+    # Sélectionner les comptes de classe 70 (sauf 709)
+    mask_70 = fec_data['CompteNum'].str.startswith('70') & ~fec_data['CompteNum'].str.startswith('709')
+    
+    # Calculer le CA brut (crédits - débits des comptes 70)
+    ca_brut = fec_data[mask_70]['Credit'].sum() - fec_data[mask_70]['Debit'].sum()
+    
+    # Soustraire les remises, rabais et ristournes (comptes 709)
+    rrr = fec_data[fec_data['CompteNum'].str.startswith('709')]['Credit'].sum()
+    
+    # Calculer le CA net
+    ca_net = ca_brut - rrr
+    
+    return ca_net
 
 
 def calculate_achats_consommes(fec_data):
