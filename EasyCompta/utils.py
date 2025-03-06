@@ -60,7 +60,6 @@ def calculate_ca(fec_data):
     
     return ca_net
 
-
 def calculate_achats_consommes(fec_data):
     # Achats (comptes 60, sauf 603)
     achats = fec_data[fec_data['CompteNum'].str.startswith('60') & ~fec_data['CompteNum'].str.startswith('603')]['Debit'].sum()
@@ -224,7 +223,6 @@ def calculate_ebe(fec_data):
           (achats_consommes + variation_stocks + services_exterieurs + impots_taxes + charges_personnel)
     
     return ebe
-
 
 def calculate_rex(fec_data):
     # Calcul de l'EBE (en utilisant la fonction précédente)
